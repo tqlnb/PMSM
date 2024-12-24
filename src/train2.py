@@ -7,12 +7,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
 # Load the dataset
-df = pd.read_csv('input/measures_v2.csv')
+df = pd.read_csv('data/merged.csv')
 
 # Features and target
-features = ['u_q', 'coolant', 'stator_winding', 'u_d', 'stator_tooth', 'motor_speed', 'i_d', 'i_q', 'pm', 'stator_yoke',
-            'ambient']
-target = 'torque'
+features = ['iq', 'id', 'vd', 'vq']
+target = ['torque', 'speed']
 
 # Prepare data 准备数据
 X = df[features].values
@@ -22,7 +21,7 @@ y = df[target].values
 scaler_X = StandardScaler()
 scaler_y = StandardScaler()
 X_scaled = scaler_X.fit_transform(X)
-y_scaled = scaler_y.fit_transform(y.reshape(-1, 1)).flatten()
+y_scaled = scaler_y.fit_transform(y)
 
 # Split data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=42)
@@ -38,9 +37,9 @@ y_test_tensor = torch.tensor(y_test, dtype=torch.float32)
 class PINN(nn.Module):
     def __init__(self):
         super(PINN, self).__init__()
-        self.fc1 = nn.Linear(11, 64)
+        self.fc1 = nn.Linear(4, 64)
         self.fc2 = nn.Linear(64, 64)
-        self.fc3 = nn.Linear(64, 1)
+        self.fc3 = nn.Linear(64, 2)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
@@ -55,7 +54,7 @@ criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Training loop
-num_epochs = 100
+num_epochs = 1000
 for epoch in range(num_epochs):
     model.train()
 
@@ -80,10 +79,9 @@ with torch.no_grad():
 
 # Inverse transform for original scale
 y_pred = scaler_y.inverse_transform(test_outputs.numpy())
-y_true = scaler_y.inverse_transform(y_test_tensor.numpy().reshape(-1, 1))
+y_true = scaler_y.inverse_transform(y_test_tensor.numpy())
 
 # You can add more evaluations, such as computing R^2 score or visualizing results
-
 from sklearn.metrics import mean_squared_error, r2_score
 
 # Compute MSE and R2 score
@@ -93,18 +91,18 @@ r2 = r2_score(y_true, y_pred)
 print(f'Test Mean Squared Error: {mse:.4f}')
 print(f'Test R^2 Score: {r2:.4f}')
 
+# Compute residuals
 residuals = np.abs(y_true - y_pred)
 
 import matplotlib.pyplot as plt
 
 # Plot residuals
 plt.figure(figsize=(12, 6))
-plt.hist(residuals, bins=50, edgecolor='k', alpha=0.7)
+plt.hist(residuals.flatten(), bins=50, edgecolor='k', alpha=0.7)
 plt.xlabel('Residuals')
 plt.ylabel('Frequency')
 plt.title('Residuals Distribution')
 plt.show()
-
 
 import matplotlib.pyplot as plt
 
