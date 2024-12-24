@@ -111,85 +111,35 @@ int main(void)
 
 ```
 
-
+## id,iq,ud,uq来源
 在电机控制中，\(i_{uvw}\)、\(u_{uvw}\) 是指定子三相电流和电压，\(i_{d}\)、\(i_{q}\)、\(u_{d}\)、\(u_{q}\) 是在旋转坐标系（dq坐标系）中的电流和电压分量。将三相坐标系 (\(uvw\)) 转换到两相旋转坐标系 (\(dq\))，需要进行坐标变换，这包括 **Clark变换** 和 **Park变换**。
 
 以下是主要步骤：
 
 ---
 
-1. **从三相坐标系到两相静止坐标系（\(\alpha\beta\)） - Clark变换**
+1. **从三相坐标系到两相静止坐标系 - Clark变换**
 Clark变换将三相信号投影到一个静止的两相平面上。假设三相电流为 \(i_u\), \(i_v\), \(i_w\)，我们有：
 
-\[
-i_\alpha = i_u
-\]
-\[
-i_\beta = \frac{1}{\sqrt{3}} (i_u + 2i_v)
-\]
+![image](https://github.com/user-attachments/assets/2f6e830d-c8ad-49e4-8e78-9b89a562e11e)
 
 若三相电流满足平衡（\(i_u + i_v + i_w = 0\)），上述公式可以简化为：
 
-\[
-\begin{bmatrix}
-i_\alpha \\
-i_\beta
-\end{bmatrix}
-=
-\frac{2}{3}
-\begin{bmatrix}
-1 & -\frac{1}{2} & -\frac{1}{2} \\
-0 & \frac{\sqrt{3}}{2} & -\frac{\sqrt{3}}{2}
-\end{bmatrix}
-\begin{bmatrix}
-i_u \\
-i_v \\
-i_w
-\end{bmatrix}
-\]
+![image](https://github.com/user-attachments/assets/d98e8954-3d83-4708-ad84-9b6db78f7e88)
+
 
 同理适用于电压 (\(u_u, u_v, u_w\))。
 
----
 
 2. **从静止坐标系到旋转坐标系（\(dq\)） - Park变换**
 Park变换将 \(\alpha\beta\) 坐标系中的量投影到旋转坐标系 \(dq\)。旋转坐标系与电机转子的旋转位置同步，使用转子磁链位置角 \(\theta\) 进行变换：
 
-\[
-\begin{bmatrix}
-i_d \\
-i_q
-\end{bmatrix}
-=
-\begin{bmatrix}
-\cos\theta & \sin\theta \\
--\sin\theta & \cos\theta
-\end{bmatrix}
-\begin{bmatrix}
-i_\alpha \\
-i_\beta
-\end{bmatrix}
-\]
 
-\[
-\begin{bmatrix}
-u_d \\
-u_q
-\end{bmatrix}
-=
-\begin{bmatrix}
-\cos\theta & \sin\theta \\
--\sin\theta & \cos\theta
-\end{bmatrix}
-\begin{bmatrix}
-u_\alpha \\
-u_\beta
-\end{bmatrix}
-\]
+![image](https://github.com/user-attachments/assets/2b7db792-fb77-4dba-9257-699ce3cbef83)
+
 
 其中，\(\theta\) 通常由电机控制器中的位置传感器（如编码器）或观测器提供。
 
----
 
 3. **总结**
 - Clark变换：将三相信号投影到静止的 \(\alpha\beta\) 平面；
@@ -197,6 +147,92 @@ u_\beta
 - \(i_d\)、\(i_q\) 分别对应直轴（d轴）和交轴（q轴）的电流分量，通常 \(i_d\) 用于控制磁链，\(i_q\) 用于控制电磁转矩。
 
 完整流程为：
-\[
-i_{uvw} \xrightarrow{\text{Clark}} i_{\alpha\beta} \xrightarrow{\text{Park}} i_{dq}
-\]
+
+![image](https://github.com/user-attachments/assets/7bfcceab-e41b-4f52-94ce-c144ff5139be)
+
+## 在电机运行时使用java程序收集串口数据
+
+```java
+package tql.test.test32;
+
+import jssc.SerialPort;
+import jssc.SerialPortEvent;
+import jssc.SerialPortEventListener;
+import jssc.SerialPortException;
+
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+
+public class SerialDataLogger {
+    private static final String PORT_NAME = "COM5"; // 修改为实际串口名称
+    private static final int BAUD_RATE = 115200;   // 根据实际设置波特率
+    private static final String OUTPUT_FILE = "data_log.txt";
+    private static BufferedWriter writer;
+
+    public static void main(String[] args) throws IOException {
+        SerialPort serialPort = new SerialPort(PORT_NAME);
+        try {
+            // 打开串口
+            serialPort.openPort();
+            serialPort.setParams(
+                BAUD_RATE,
+                SerialPort.DATABITS_8,
+                SerialPort.STOPBITS_1,
+                SerialPort.PARITY_NONE
+            );
+
+            // 添加串口监听器
+            serialPort.addEventListener(new SerialPortEventListener() {
+
+                {
+                    try {
+                        writer = new BufferedWriter(new FileWriter(OUTPUT_FILE, true));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                @Override
+                public void serialEvent(SerialPortEvent event) {
+                    if (event.isRXCHAR() && event.getEventValue() > 0) {
+                        try {
+
+                            String data = serialPort.readString(event.getEventValue());
+                            //System.out.println(data);
+                            if(data.startsWith("id")) {
+                                if(!data.endsWith("\n")) {
+                                    data = data + "\n";
+                                }
+                                String s = System.currentTimeMillis() + ",Received:" + data;
+                                System.out.print(s);
+
+                                if (writer != null) {
+                                    writer.write(s);
+                                    writer.flush();
+                                }
+                            }
+                        } catch (SerialPortException | IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            });
+            while (true) {
+                Thread.sleep(1000);
+            }
+        } catch (SerialPortException e) {
+            e.printStackTrace();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        } finally {
+            if (writer != null) {
+                writer.close();
+            }
+        }
+    }
+}
+
+```
+
+
